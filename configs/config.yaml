@@ -1,0 +1,29 @@
+# Pipeline configuration. Paths relative to the repo root.
+
+data:
+  articles_path: data/articles.parquet
+  seed: 42
+
+feeds:
+  # Real public RSS feeds (optional; scripts/fetch_rss.py)
+  urls:
+    - "https://feeds.bbci.co.uk/news/technology/rss.xml"
+    - "https://feeds.bbci.co.uk/news/business/rss.xml"
+
+dedup:
+  similarity_threshold: 0.92   # cosine above this = near-duplicate
+
+stories:
+  cluster_threshold: 0.72      # article joins a story above this centroid cosine
+
+trends:
+  burst_trailing_days: 5
+  burst_min_articles: 4
+  burst_ratio: 2.5             # today >= ratio x trailing mean -> burst
+
+brief:
+  top_stories: 5
+  max_tokens: 800
+
+eval:
+  experiment_name: trendscout
