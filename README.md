@@ -1,4 +1,4 @@
-# TrendScout — Real-Time News Intelligence & Trend Discovery Engine
+# TrendScout — News Intelligence (Event Sourcing Architecture)
 
 <div align="center">
 
@@ -13,88 +13,85 @@
 
 </div>
 
-> **Real-time news intelligence pipeline: live RSS streaming, MinHash near-duplicate deduplication, single-pass incremental story clustering, Kleinberg-style burst detection, and AI daily briefings with inline citations.**
+> **Real-time news intelligence and trend discovery platform architected around Event Sourcing — recording all narrative developments in an append-only event store and hydrating rebuildable analytical projections for topic volume, burst leaderboards, and story cluster lifecycles.**
 
 ---
 
-## 📖 Executive Summary & Value Proposition
+## 🏛️ Architecture Pattern: Event Sourcing Architecture
 
-**`trendscout`** is a production-grade, end-to-end machine learning system built with strict engineering discipline, reproducible pipelines, and enterprise MLOps best practices. It bridges the gap between theoretical statistical rigor and high-availability operational microservices.
+In evolving media landscapes, mutable database records erase narrative history (e.g. how a story developed from initial wire report to global breaking news). Changing clustering hyperparameters or burst formulas requires replaying historical event timelines.
 
-## 📰 Core Methodologies & Real-Time NLP
-
-### 1. MinHash LSH Near-Duplicate Deduplication
-- Collapses syndicated wire stories and minor editorial rewrites in $O(1)$ lookup time using MinHash locality-sensitive hashing.
-
-### 2. Single-Pass Online Incremental Story Clustering
-- Groups incoming news items into evolving narrative clusters with dynamic cluster centroids and temporal decay.
-
-### 3. Kleinberg Burst Detection
-- Models publication velocity spikes to identify emerging market-moving stories before mainstream saturation.
-
-### 4. Autonomous Daily Briefing Agent
-- Generates structured executive summaries with inline markdown citations linking back to original news outlets.
-
-## 📊 Architecture & Pipeline
+`trendscout` treats state as a sequence of immutable domain events stored in an **Append-Only Event Store**:
 
 ```mermaid
-flowchart LR
-    RSS[Live RSS Media Streams] --> MinHash[MinHash LSH Deduplication]
-    MinHash --> Cluster[Single-Pass Incremental Clustering]
-    Cluster --> Burst[Kleinberg Burst Velocity Detector]
-    Burst --> Agent[Autonomous Synthesis Briefing Agent]
-    Agent --> API[FastAPI :8100] --> UI[Streamlit Newsfeed :8601]
+sequenceDiagram
+    autonumber
+    participant Feeds as RSS / Media Ingest
+    participant Log as EventStore (Append-Only Log)
+    participant VolProj as TopicVolumeProjection
+    participant BurstProj as BurstLeaderboardProjection
+    participant Client as Analytics API / UI
+
+    Feeds->>Log: append(ArticleIngestedEvent)
+    Feeds->>Log: append(StoryClusterFormedEvent)
+    Feeds->>Log: append(BurstDetectedEvent)
+
+    note over Log: Events are immutable, ordered, and permanent
+
+    Log->>VolProj: apply(ArticleIngestedEvent)
+    Log->>BurstProj: apply(BurstDetectedEvent)
+
+    Client->>VolProj: get_topic_count("ai_safety")
+    VolProj-->>Client: Returns 42 articles
+    Client->>BurstProj: get_recent_bursts(limit=5)
+    BurstProj-->>Client: Returns top velocity burst stories
+
+    note over VolProj,BurstProj: Projections can be wiped & fully rebuilt anytime via replay
 ```
 
-## 🛠️ Tech Stack & Engineering Standards
-- **NLP & Streaming:** Python 3.12, Feedparser, Sentence-Transformers, Claude / Ollama
-- **Serving & UI:** FastAPI, Streamlit, MLflow
-- **Testing:** Pytest verification of deduplication, clustering stability, and briefing synthesis
+### Event Sourcing Features
+- **Deterministic Replayability**: `projection.rebuild_from_store(store)` hydrates any read model from zero by replaying historical events.
+- **Time-Travel Auditing**: Inspect the exact state of breaking news clusters at any point in the past.
+- **Decoupled Read Projections**: Add new analytical views without modifying the ingestion pipeline or mutating existing schemas.
 
+### Module Organization
+- **`events/contracts.py`**: Immutable domain event dataclasses (`ArticleIngestedEvent`, `StoryClusterFormedEvent`, `BurstDetectedEvent`, `TrendBriefGeneratedEvent`).
+- **`events/store.py`**: `EventStore` append-only log with sequential indexing and typed streaming.
+- **`projections/projections.py`**: Rebuildable read models (`TopicVolumeProjection`, `BurstLeaderboardProjection`).
+- **`stories/cluster.py`**: Incremental single-pass story clustering.
+- **`trends/burst.py`**: Statistical burst velocity detection.
+- **`brief/daily.py`**: AI daily briefing synthesizer with citations.
+
+---
+
+## 📰 Core Methodologies & Trend Detection
+
+### 1. MinHash LSH Deduplication
+- Collapses syndicated wire stories in $O(1)$ lookup time using MinHash locality-sensitive hashing.
+
+### 2. Statistical Burst Velocity Detection
+- Compares current publication rate $N_{\text{today}}$ against trailing baseline $\mu_{\text{trailing}}$:
+  $$\text{Velocity Ratio} = \frac{N_{\text{today}}}{\max(\mu_{\text{trailing}}, 1.0)}$$
+- Triggers `BurstDetectedEvent` when velocity ratio exceeds threshold $\theta$.
 
 ---
 
 ## 🚀 Quickstart & Setup Guide
 
-### 1. Prerequisites & Environment Setup
-Using **[uv](https://docs.astral.sh/uv/)** for lightning-fast, reproducible dependency resolution:
-
 ```bash
-# Clone the repository
 git clone https://github.com/jackson-marcus/trendscout.git
 cd trendscout
 
-# Install dependencies and pre-commit hooks
+$env:UV_CACHE_DIR = "D:\ml-projects\.uv-cache"
 uv sync --group dev
-```
 
-### 2. Run Test Suite & Code Quality Checks
-```bash
-# Run unit & integration tests with coverage
-uv run pytest --cov
-
-# Run ruff linter and formatting checks
+# Run unit tests and event sourcing verification
+uv run pytest -q
 uv run ruff check .
-uv run ruff format --check .
-```
 
-### 3. Launch Services Locally
-```bash
-# Start FastAPI REST API (listening on port :8100)
+# Launch FastAPI (port :8100) + Streamlit newsfeed (port :8601)
 make api
-# Or: uv run uvicorn trendscout.api.main:app --reload --port 8100
-
-# Start interactive Streamlit dashboard (listening on port :8601)
 make ui
-
-# Launch local MLflow Experiment Tracking UI (listening on port :5010)
-make mlflow
-```
-
-### 4. Run with Docker Compose
-```bash
-# Spin up the complete microservice stack
-docker compose up --build
 ```
 
 ---
@@ -103,20 +100,19 @@ docker compose up --build
 
 ```
 trendscout/
-├── .github/workflows/ci.yml       # GitHub Actions CI pipeline (lint, test, build)
-├── configs/                      # Configuration files and hyperparameters
-├── data/                         # Data directory (raw, interim, processed)
-├── scripts/                      # Data generators and operational scripts
+├── configs/                      # Burst thresholds, clustering params, LLM prompts
+├── data/                         # Sample news articles and feed snapshots
 ├── src/trendscout/               # Core Python package
-│   ├── api/                      # FastAPI routes, schemas, and endpoints
-│   ├── models/                   # Statistical models, ML algorithms, and estimators
-│   ├── ui/                       # Streamlit interactive application
-│   └── settings.py               # Centralized configuration & environment loader
-├── tests/                        # Comprehensive Pytest suite
-├── docker-compose.yml            # Multi-service container orchestration
-├── Dockerfile                    # Container definition for API service
-├── Makefile                      # Standardized project tasks
-└── pyproject.toml                # Pinned dependencies and tool configs
+│   ├── events/                   # Event Sourcing: domain events, event store log
+│   ├── projections/              # Rebuildable read models: topic counts, bursts
+│   ├── stories/                  # Incremental semantic clustering
+│   ├── trends/                   # Burst velocity detection
+│   ├── brief/                    # Autonomous briefing synthesizer
+│   ├── api/                      # FastAPI REST endpoints
+│   └── ui/                       # Streamlit intelligence dashboard
+├── tests/                        # Comprehensive Pytest suite covering event sourcing & clustering
+├── docker-compose.yml
+└── pyproject.toml
 ```
 
 ---
@@ -128,5 +124,20 @@ trendscout/
 - **Upwork:** [Jackson Marcus on Upwork](https://www.upwork.com/freelancers/~012235717501ad9c7b)
 - **GitHub:** [@jackson-marcus](https://github.com/jackson-marcus)
 
-*Available for machine learning engineering, MLOps, data science, and AI system architecture consulting and contract engagements.*
+---
 
+## 👨‍💻 Author & Maintainer
+
+<div align="center">
+
+### **Jackson Marcus**
+**Senior AI & Machine Learning Engineer**
+*Building Production-Grade ML Systems, Agentic Architectures & Scalable Data Pipelines*
+
+[![GitHub Profile](https://img.shields.io/badge/GitHub-jackson--marcus-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jackson-marcus)
+[![Upwork Portfolio](https://img.shields.io/badge/Upwork-Top%20Rated%20Plus-14A800?style=for-the-badge&logo=upwork&logoColor=white)](https://www.upwork.com/freelancers/~012235717501ad9c7b)
+[![Email Contact](https://img.shields.io/badge/Email-wajahatanees41%40gmail.com-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:wajahatanees41@gmail.com)
+
+📍 *Byron, GA, USA*
+
+</div>
