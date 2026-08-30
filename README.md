@@ -17,8 +17,6 @@
 
 </div>
 
-> **Portfolio project.** Built to demonstrate the Event Sourcing pattern alongside a practical NLP pipeline on synthetic (and optionally real RSS) news data. Not hardened for production use.
-
 ---
 
 ## The problem
